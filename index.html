@@ -3,3 +3,206 @@
   <source src="Before It Could Begin.mp3" type="audio/mpeg">
   Trình duyệt của bạn không hỗ trợ phát âm thanh.
 </audio>
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bảng Vẽ Pixel 1000x1000</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: #1e1e2e;
+      color: #cdd6f4;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    /* Thanh công cụ */
+    .toolbar {
+      background-color: #181825;
+      padding: 10px 20px;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      border-bottom: 1px solid #313244;
+      z-index: 10;
+    }
+    .tools-group { display: flex; align-items: center; gap: 8px; }
+    label { font-size: 14px; }
+    input[type="color"] {
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      cursor: pointer;
+      background: none;
+    }
+    button {
+      background-color: #313244;
+      color: #cdd6f4;
+      border: 1px solid #45475a;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:hover { background-color: #45475a; }
+    .coords { font-size: 12px; color: #a6adc8; margin-left: auto; }
+
+    /* Khung nhìn Canvas */
+    #viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: crosshair;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      image-rendering: pixelated; /* Giữ pixel nét căng khi zoom */
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Thanh điều khiển -->
+  <div class="toolbar">
+    <div class="tools-group">
+      <label for="colorPicker">Màu vẽ:</label>
+      <input type="color" id="colorPicker" value="#f38ba8">
+    </div>
+    <button id="btnReset">Về giữa màn hình</button>
+    <button id="btnClear">Xóa sạch bảng</button>
+    <span class="coords" id="coords">Pixel: (0, 0) | Zoom: 100%</span>
+  </div>
+
+  <!-- Khung chứa Canvas -->
+  <div id="viewport">
+    <canvas id="pixelCanvas" width="1000" height="1000"></canvas>
+  </div>
+
+  <script>
+    const GRID_SIZE = 1000;
+    const canvas = document.getElementById('pixelCanvas');
+    const ctx = canvas.getContext('2d');
+    const viewport = document.getElementById('viewport');
+    const colorPicker = document.getElementById('colorPicker');
+    const coordsDisplay = document.getElementById('coords');
+
+    // Trạng thái Camera (Pan & Zoom)
+    let scale = 1;
+    let panX = 0;
+    let panY = 0;
+    let isPanning = false;
+    let isDrawing = false;
+    let startX = 0, startY = 0;
+
+    // Khởi tạo nền trắng cho bảng
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, GRID_SIZE, GRID_SIZE);
+
+    // Căn giữa bảng khi vừa load
+    function centerCanvas() {
+      const rect = viewport.getBoundingClientRect();
+      scale = Math.min(rect.width / GRID_SIZE, rect.height / GRID_SIZE) * 0.9;
+      panX = (rect.width - GRID_SIZE * scale) / 2;
+      panY = (rect.height - GRID_SIZE * scale) / 2;
+      updateTransform();
+    }
+
+    function updateTransform() {
+      canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      canvas.style.transformOrigin = '0 0';
+      coordsDisplay.innerText = `Zoom: ${Math.round(scale * 100)}%`;
+    }
+
+    // Chuyển đổi tọa độ chuột màn hình -> Tọa độ Pixel (0-999)
+    function getPixelCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor((e.clientX - rect.left) / scale);
+      const y = Math.floor((e.clientY - rect.top) / scale);
+      return { x, y };
+    }
+
+    // Tô màu vào 1 Pixel
+    function drawPixel(x, y, color) {
+      if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
+
+    // --- Xử lý Sự kiện Chuột ---
+
+    viewport.addEventListener('mousedown', (e) => {
+      if (e.button === 0) { // Chuột trái: Vẽ
+        isDrawing = true;
+        const { x, y } = getPixelCoords(e);
+        drawPixel(x, y, colorPicker.value);
+      } else if (e.button === 1 || e.button === 2) { // Chuột giữa hoặc chuột phải: Kéo pan
+        isPanning = true;
+        startX = e.clientX - panX;
+        startY = e.clientY - panY;
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      const { x, y } = getPixelCoords(e);
+      if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+        coordsDisplay.innerText = `Pixel: (${x}, ${y}) | Zoom: ${Math.round(scale * 100)}%`;
+      }
+
+      if (isDrawing) {
+        drawPixel(x, y, colorPicker.value);
+      } else if (isPanning) {
+        panX = e.clientX - startX;
+        panY = e.clientY - startY;
+        updateTransform();
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      isDrawing = false;
+      isPanning = false;
+    });
+
+    // Chống mở menu ngữ cảnh khi click chuột phải để kéo màn hình
+    viewport.addEventListener('contextmenu', e => e.preventDefault());
+
+    // Zoom bằng cuộn chuột
+    viewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = 1.1;
+      let newScale = e.deltaY < 0 ? scale * zoomFactor : scale / zoomFactor;
+      newScale = Math.max(0.2, Math.min(newScale, 50)); // Giới hạn zoom từ 20% đến 5000%
+
+      const rect = viewport.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      panX = mouseX - (mouseX - panX) * (newScale / scale);
+      panY = mouseY - (mouseY - panY) * (newScale / scale);
+      scale = newScale;
+
+      updateTransform();
+    }, { passive: false });
+
+    // Nút điều khiển
+    document.getElementById('btnReset').addEventListener('click', centerCanvas);
+    document.getElementById('btnClear').addEventListener('click', () => {
+      if (confirm('Bạn có chắc muốn xóa toàn bộ bảng vẽ?')) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, GRID_SIZE, GRID_SIZE);
+      }
+    });
+
+    // Khởi chạy ban đầu
+    centerCanvas();
+  </script>
+</body>
+</html>
