@@ -82,6 +82,8 @@
       top: 0;
       left: 0;
       image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      
     }
     #gridCanvas { pointer-events: none; } /* Không cản trở click chuột */
   </style>
@@ -112,6 +114,8 @@
     const GRID_SIZE = 400; // Đã đổi thành 400x400
     
     const container = document.getElementById('canvasContainer');
+    ctx.imageSmoothingEnabled = false;
+ctx.webkitImageSmoothingEnabled = false;
     const canvas = document.getElementById('pixelCanvas');
     const ctx = canvas.getContext('2d');
     const gridCanvas = document.getElementById('gridCanvas');
