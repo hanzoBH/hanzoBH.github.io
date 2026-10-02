@@ -8,12 +8,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bảng Vẽ Pixel 1000x1000</title>
+  <title>Bảng Vẽ Pixel 400x400</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: system-ui, -apple-system, sans-serif;
-      background-color: #1e1e2e;
+      background-color: #181825;
       color: #cdd6f4;
       display: flex;
       flex-direction: column;
@@ -21,22 +21,22 @@
       overflow: hidden;
     }
     
-    /* Thanh công cụ */
     .toolbar {
-      background-color: #181825;
+      background-color: #11111b;
       padding: 10px 20px;
       display: flex;
-      gap: 15px;
+      gap: 12px;
       align-items: center;
       border-bottom: 1px solid #313244;
       z-index: 10;
+      flex-wrap: wrap;
     }
     .tools-group { display: flex; align-items: center; gap: 8px; }
-    label { font-size: 14px; }
+    label { font-size: 13px; color: #a6adc8; }
     input[type="color"] {
       border: none;
-      width: 32px;
-      height: 32px;
+      width: 30px;
+      height: 30px;
       border-radius: 6px;
       cursor: pointer;
       background: none;
@@ -49,79 +49,126 @@
       border-radius: 6px;
       cursor: pointer;
       font-size: 13px;
+      transition: all 0.2s;
     }
     button:hover { background-color: #45475a; }
+    button.active {
+      background-color: #89b4fa;
+      color: #11111b;
+      font-weight: bold;
+    }
     .coords { font-size: 12px; color: #a6adc8; margin-left: auto; }
 
-    /* Khung nhìn Canvas */
     #viewport {
       flex: 1;
       position: relative;
       overflow: hidden;
       cursor: crosshair;
+      background-color: #181825;
     }
+    
+    /* Container để đồng bộ Canvas Vẽ và Canvas Lưới */
+    #canvasContainer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 400px;
+      height: 400px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+    
     canvas {
       position: absolute;
       top: 0;
       left: 0;
-      image-rendering: pixelated; /* Giữ pixel nét căng khi zoom */
+      image-rendering: pixelated;
     }
+    #gridCanvas { pointer-events: none; } /* Không cản trở click chuột */
   </style>
 </head>
 <body>
 
-  <!-- Thanh điều khiển -->
   <div class="toolbar">
     <div class="tools-group">
-      <label for="colorPicker">Màu vẽ:</label>
+      <label for="colorPicker">Màu:</label>
       <input type="color" id="colorPicker" value="#f38ba8">
     </div>
-    <button id="btnReset">Về giữa màn hình</button>
-    <button id="btnClear">Xóa sạch bảng</button>
+    <button id="btnPencil" class="active">✏️ Bút vẽ</button>
+    <button id="btnEraser">🧹 Cục tẩy</button>
+    <button id="btnToggleGrid">🌐 Bật/Tắt Lưới</button>
+    <button id="btnReset">🎯 Về giữa</button>
+    <button id="btnClear">🗑️️ Xóa sạch</button>
     <span class="coords" id="coords">Pixel: (0, 0) | Zoom: 100%</span>
   </div>
 
-  <!-- Khung chứa Canvas -->
   <div id="viewport">
-    <canvas id="pixelCanvas" width="1000" height="1000"></canvas>
+    <div id="canvasContainer">
+      <canvas id="pixelCanvas" width="400" height="400"></canvas>
+      <canvas id="gridCanvas" width="400" height="400"></canvas>
+    </div>
   </div>
 
   <script>
-    const GRID_SIZE = 1000;
+    const GRID_SIZE = 400; // Đã đổi thành 400x400
+    
+    const container = document.getElementById('canvasContainer');
     const canvas = document.getElementById('pixelCanvas');
     const ctx = canvas.getContext('2d');
+    const gridCanvas = document.getElementById('gridCanvas');
+    const gridCtx = gridCanvas.getContext('2d');
+    
     const viewport = document.getElementById('viewport');
     const colorPicker = document.getElementById('colorPicker');
     const coordsDisplay = document.getElementById('coords');
 
-    // Trạng thái Camera (Pan & Zoom)
     let scale = 1;
-    let panX = 0;
-    let panY = 0;
-    let isPanning = false;
-    let isDrawing = false;
+    let panX = 0, panY = 0;
+    let isPanning = false, isDrawing = false;
     let startX = 0, startY = 0;
+    
+    let isEraser = false;
+    let showGrid = false;
 
-    // Khởi tạo nền trắng cho bảng
+    // Nền trắng mặc định
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, GRID_SIZE, GRID_SIZE);
 
-    // Căn giữa bảng khi vừa load
+    // Vẽ đường lưới Pixel
+    function drawGrid() {
+      gridCtx.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
+      if (!showGrid || scale < 4) return; // Chỉ hiển thị lưới khi zoom đủ to (>= 400%)
+
+      gridCtx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+      gridCtx.lineWidth = 0.05;
+
+      for (let i = 0; i <= GRID_SIZE; i++) {
+        gridCtx.beginPath();
+        gridCtx.moveTo(i, 0);
+        gridCtx.lineTo(i, GRID_SIZE);
+        gridCtx.stroke();
+
+        gridCtx.beginPath();
+        gridCtx.moveTo(0, i);
+        gridCtx.lineTo(GRID_SIZE, i);
+        gridCtx.stroke();
+      }
+    }
+
     function centerCanvas() {
       const rect = viewport.getBoundingClientRect();
-      scale = Math.min(rect.width / GRID_SIZE, rect.height / GRID_SIZE) * 0.9;
+      scale = Math.min(rect.width / GRID_SIZE, rect.height / GRID_SIZE) * 0.8;
       panX = (rect.width - GRID_SIZE * scale) / 2;
       panY = (rect.height - GRID_SIZE * scale) / 2;
       updateTransform();
     }
 
     function updateTransform() {
-      canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-      canvas.style.transformOrigin = '0 0';
+      container.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      container.style.transformOrigin = '0 0';
       coordsDisplay.innerText = `Zoom: ${Math.round(scale * 100)}%`;
+      drawGrid();
     }
 
-    // Chuyển đổi tọa độ chuột màn hình -> Tọa độ Pixel (0-999)
     function getPixelCoords(e) {
       const rect = canvas.getBoundingClientRect();
       const x = Math.floor((e.clientX - rect.left) / scale);
@@ -129,22 +176,20 @@
       return { x, y };
     }
 
-    // Tô màu vào 1 Pixel
-    function drawPixel(x, y, color) {
+    function drawPixel(x, y) {
       if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
-        ctx.fillStyle = color;
+        ctx.fillStyle = isEraser ? '#ffffff' : colorPicker.value;
         ctx.fillRect(x, y, 1, 1);
       }
     }
 
-    // --- Xử lý Sự kiện Chuột ---
-
+    // --- Sự kiện chuột ---
     viewport.addEventListener('mousedown', (e) => {
-      if (e.button === 0) { // Chuột trái: Vẽ
+      if (e.button === 0) {
         isDrawing = true;
         const { x, y } = getPixelCoords(e);
-        drawPixel(x, y, colorPicker.value);
-      } else if (e.button === 1 || e.button === 2) { // Chuột giữa hoặc chuột phải: Kéo pan
+        drawPixel(x, y);
+      } else if (e.button === 1 || e.button === 2) {
         isPanning = true;
         startX = e.clientX - panX;
         startY = e.clientY - panY;
@@ -158,7 +203,7 @@
       }
 
       if (isDrawing) {
-        drawPixel(x, y, colorPicker.value);
+        drawPixel(x, y);
       } else if (isPanning) {
         panX = e.clientX - startX;
         panY = e.clientY - startY;
@@ -171,15 +216,14 @@
       isPanning = false;
     });
 
-    // Chống mở menu ngữ cảnh khi click chuột phải để kéo màn hình
     viewport.addEventListener('contextmenu', e => e.preventDefault());
 
-    // Zoom bằng cuộn chuột
+    // Zoom
     viewport.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const zoomFactor = 1.1;
+      const zoomFactor = 1.15;
       let newScale = e.deltaY < 0 ? scale * zoomFactor : scale / zoomFactor;
-      newScale = Math.max(0.2, Math.min(newScale, 50)); // Giới hạn zoom từ 20% đến 5000%
+      newScale = Math.max(0.5, Math.min(newScale, 80));
 
       const rect = viewport.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
@@ -192,16 +236,36 @@
       updateTransform();
     }, { passive: false });
 
-    // Nút điều khiển
+    // --- Các nút điều khiển ---
+    const btnPencil = document.getElementById('btnPencil');
+    const btnEraser = document.getElementById('btnEraser');
+
+    btnPencil.addEventListener('click', () => {
+      isEraser = false;
+      btnPencil.classList.add('active');
+      btnEraser.classList.remove('active');
+    });
+
+    btnEraser.addEventListener('click', () => {
+      isEraser = true;
+      btnEraser.classList.add('active');
+      btnPencil.classList.remove('active');
+    });
+
+    document.getElementById('btnToggleGrid').addEventListener('click', (e) => {
+      showGrid = !showGrid;
+      e.target.classList.toggle('active', showGrid);
+      drawGrid();
+    });
+
     document.getElementById('btnReset').addEventListener('click', centerCanvas);
     document.getElementById('btnClear').addEventListener('click', () => {
-      if (confirm('Bạn có chắc muốn xóa toàn bộ bảng vẽ?')) {
+      if (confirm('Xóa sạch bảng vẽ?')) {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, GRID_SIZE, GRID_SIZE);
       }
     });
 
-    // Khởi chạy ban đầu
     centerCanvas();
   </script>
 </body>
