@@ -136,7 +136,7 @@
     // Vẽ đường lưới Pixel
     function drawGrid() {
       gridCtx.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
-      if (!showGrid || scale < 4) return; // Chỉ hiển thị lưới khi zoom đủ to (>= 400%)
+      if (!showGrid || scale < 2) return; // Chỉ hiển thị lưới khi zoom đủ to (>= 400%)
 
       gridCtx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
       gridCtx.lineWidth = 0.05;
@@ -223,7 +223,7 @@
       e.preventDefault();
       const zoomFactor = 1.15;
       let newScale = e.deltaY < 0 ? scale * zoomFactor : scale / zoomFactor;
-      newScale = Math.max(0.5, Math.min(newScale, 80));
+      newScale = Math.max(0.5, Math.min(newScale, 300));
 
       const rect = viewport.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
