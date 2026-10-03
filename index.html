@@ -223,7 +223,7 @@
       e.preventDefault();
       const zoomFactor = 1.15;
       let newScale = e.deltaY < 0 ? scale * zoomFactor : scale / zoomFactor;
-      newScale = Math.max(0.5, Math.min(newScale, 300));
+      newScale = Math.max(0.5, Math.min(newScale, 400));
 
       const rect = viewport.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
