@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wordle Game - Hanzo Web</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Canvas Confetti CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- FontAwesome Icons CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                    },
+                    colors: {
+                        correct: '#10B981', // Emerald 500
+                        present: '#F59E0B', // Amber 500
+                        absent: '#6B7280',  // Gray 500
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Animations */
+        .tile-pop {
+            animation: pop 0.12s ease-in-out;
+        }
+        @keyframes pop {
+            0% { transform: scale(0.85); opacity: 0.6; }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .tile-shake {
+            animation: shake 0.4s ease-in-out;
+        }
+        @keyframes shake {
+            10%, 90% { transform: translateX(-2px); }
+            20%, 80% { transform: translateX(4px); }
+            30%, 50%, 70% { transform: translateX(-6px); }
+            40%, 60% { transform: translateX(6px); }
+        }
+
+        /* 3D Tile Flip Effect */
+        .tile-container {
+            perspective: 1000px;
+        }
+        .tile-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        .tile-inner.flipped {
+            transform: rotateX(180deg);
+        }
+        .tile-front, .tile-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.5rem;
+            user-select: none;
+        }
+        .tile-back {
+            transform: rotateX(180deg);
+        }
+
+        /* Active feedback for keyboard buttons */
+        .key-btn {
+            touch-action: manipulation;
+        }
+        .key-btn:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-sans transition-colors duration-300 select-none">
+
+    <header class="border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between max-w-lg mx-auto w-full">
+        <div class="flex items-center gap-1.5">
+            <button id="btn-help" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" title="Hướng dẫn">
+                <i class="fa-solid fa-circle-question text-xl"></i>
+            </button>
+            <button id="btn-stats" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" title="Thống kê">
+                <i class="fa-solid fa-chart-simple text-xl"></i>
+            </button>
+        </div>
+
+        <h1 class="text-2xl font-extrabold tracking-wider bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-500 bg-clip-text text-transparent">
+            WORDLE
+        </h1>
+
+        <div class="flex items-center gap-2">
+            <!-- Language Switcher -->
+            <button id="btn-lang" class="px-2.5 py-1 text-xs font-extrabold rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 hover:opacity-80 transition-opacity">
+                VI
+            </button>
+
+            <!-- Theme Switcher -->
+            <button id="btn-theme" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" title="Đổi giao diện">
+                <i class="fa-solid fa-moon text-xl dark:hidden"></i>
+                <i class="fa-solid fa-sun text-xl hidden dark:block text-amber-400"></i>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col items-center justify-between p-3 sm:p-4 max-w-lg mx-auto w-full">
+        
+        <!-- Toast Notification Area -->
+        <div id="toast-container" class="h-8 flex items-center justify-center my-1 z-20">
+            <div id="toast" class="hidden px-4 py-1.5 rounded-full bg-slate-900 dark:bg-slate-100 text-slate-100 dark:text-slate-900 text-xs sm:text-sm font-bold shadow-xl transition-all transform scale-95 opacity-0">
+                Notification
+            </div>
+        </div>
+
+        <!-- Game Grid Board -->
+        <div id="game-board" class="grid grid-rows-6 gap-1.5 my-auto w-full max-w-[340px] aspect-[5/6]">
+            <!-- 6 Rows generated via JavaScript -->
+        </div>
+
+        <!-- Virtual Keyboard & Restart Button -->
+        <div class="w-full mt-auto pt-3">
+            <div id="keyboard" class="flex flex-col gap-1.5 w-full">
+                <!-- Virtual keyboard dynamically generated -->
+            </div>
+
+            <div class="flex items-center justify-between mt-3 px-1">
+                <button id="btn-restart" class="w-full py-2.5 px-4 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-sm">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>Tạo từ mới</span>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Help -->
+    <div id="modal-help" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 transform transition-all">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold flex items-center gap-2">
+                    <i class="fa-solid fa-circle-info text-emerald-500"></i> Hướng dẫn chơi
+                </h2>
+                <button class="btn-close-modal p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <p class="text-sm text-slate-600 dark:text-slate-300 mb-4">
+                Hãy đoán từ có <strong class="text-slate-900 dark:text-slate-100">5 chữ cái</strong> trong <strong class="text-slate-900 dark:text-slate-100">6 lần thử</strong>. Màu ô sẽ đổi sau mỗi lượt đoán:
+            </p>
+
+            <div class="space-y-3 mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-emerald-500 text-white font-extrabold flex items-center justify-center rounded-lg text-lg">H</div>
+                    <span class="text-sm">Chữ <strong>H</strong> chính xác và đúng vị trí.</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-amber-500 text-white font-extrabold flex items-center justify-center rounded-lg text-lg">A</div>
+                    <span class="text-sm">Chữ <strong>A</strong> có trong từ nhưng sai vị trí.</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-slate-500 text-white font-extrabold flex items-center justify-center rounded-lg text-lg">N</div>
+                    <span class="text-sm">Chữ <strong>N</strong> không nằm trong đáp án.</span>
+                </div>
+            </div>
+
+            <div class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/60 text-xs text-slate-500 dark:text-slate-400">
+                <i class="fa-solid fa-lightbulb text-amber-500 mr-1"></i>
+                Có thể nhấn vào nút <strong>VI / EN</strong> ở góc trên để đổi ngôn ngữ!
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Stats -->
+    <div id="modal-stats" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 transform transition-all">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold flex items-center gap-2">
+                    <i class="fa-solid fa-chart-column text-emerald-500"></i> Bảng Thống Kê
+                </h2>
+                <button class="btn-close-modal p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-4 gap-2 text-center mb-6">
+                <div class="bg-slate-100 dark:bg-slate-800/60 p-3 rounded-xl">
+                    <div id="stat-played" class="text-2xl font-extrabold text-slate-900 dark:text-slate-100">0</div>
+                    <div class="text-[10px] uppercase font-semibold text-slate-500 dark:text-slate-400 mt-1">Đã chơi</div>
+                </div>
+                <div class="bg-slate-100 dark:bg-slate-800/60 p-3 rounded-xl">
+                    <div id="stat-winrate" class="text-2xl font-extrabold text-slate-900 dark:text-slate-100">0%</div>
+                    <div class="text-[10px] uppercase font-semibold text-slate-500 dark:text-slate-400 mt-1">Tỷ lệ thắng</div>
+                </div>
+                <div class="bg-slate-100 dark:bg-slate-800/60 p-3 rounded-xl">
+                    <div id="stat-streak" class="text-2xl font-extrabold text-slate-900 dark:text-slate-100">0</div>
+                    <div class="text-[10px] uppercase font-semibold text-slate-500 dark:text-slate-400 mt-1">Chuỗi thắng</div>
+                </div>
+                <div class="bg-slate-100 dark:bg-slate-800/60 p-3 rounded-xl">
+                    <div id="stat-max-streak" class="text-2xl font-extrabold text-slate-900 dark:text-slate-100">0</div>
+                    <div class="text-[10px] uppercase font-semibold text-slate-500 dark:text-slate-400 mt-1">Kỷ lục</div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <button id="btn-stats-restart" class="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm transition-colors shadow-lg shadow-emerald-500/20">
+                    Chơi từ tiếp theo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Word Databases
+        const WORDS_EN = [
+            "APPLE", "BEACH", "BRAIN", "BREAD", "CHAIR", "CLOUD", "DANCE", "DREAM", 
+            "EARTH", "FLAME", "FRUIT", "GLASS", "GREEN", "HEART", "HOUSE", "LIGHT", 
+            "MUSIC", "OCEAN", "PARTY", "PHONE", "PLANT", "POWER", "RIVER", "SMILE", 
+            "SPACE", "STORM", "TABLE", "TRAIN", "WATER", "WORLD", "YOUTH", "ZEBRA",
+            "SMART", "MAGIC", "SWEET", "TIGER", "GHOST", "SHARK", "CANDY", "CLOCK"
+        ];
+
+        const WORDS_VI = [
+            "THONG", "NHIEN", "THANH", "TRONG", "PHONG", "KHOAN", "KHONG", "TRANG",
+            "DUONG", "VUONG", "TUONG", "HUONG", "LUONG", "XUONG", "NHUNG",
+            "TRUNG", "KHUNG", "NGUNG", "CHUNG", "PHUNG", "NHANG", "KHANG", "QUANG",
+            "HOANG", "THANG", "PHANG", "GIANG", "MIENG", "TIENG", "RIENG", "SIENG",
+            "NHIEM", "THIEM", "KHIEM", "NGHIA", "NGUON"
+        ];
+
+        const MAX_ATTEMPTS = 6;
+        const WORD_LENGTH = 5;
+
+        // Game State Variables
+        let currentLang = 'VI';
+        let targetWord = '';
+        let currentRow = 0;
+        let currentCol = 0;
+        let isGameOver = false;
+        let boardState = Array(MAX_ATTEMPTS).fill(null).map(() => Array(WORD_LENGTH).fill(''));
+        let letterStatuses = {};
+
+        // LocalStorage Stats
+        let stats = {
+            played: 0,
+            wins: 0,
+            currentStreak: 0,
+            maxStreak: 0
+        };
+
+        const KEYBOARD_LAYOUT = [
+            ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+            ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+            ['ENTER', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', 'BACKSPACE']
+        ];
+
+        // DOM Elements
+        const gameBoard = document.getElementById('game-board');
+        const keyboardEl = document.getElementById('keyboard');
+        const btnTheme = document.getElementById('btn-theme');
+        const btnLang = document.getElementById('btn-lang');
+        const btnHelp = document.getElementById('btn-help');
+        const btnStats = document.getElementById('btn-stats');
+        const btnRestart = document.getElementById('btn-restart');
+        const btnStatsRestart = document.getElementById('btn-stats-restart');
+        const modalHelp = document.getElementById('modal-help');
+        const modalStats = document.getElementById('modal-stats');
+        const toastEl = document.getElementById('toast');
+
+        function init() {
+            loadStats();
+            setupEventListeners();
+            initBoard();
+            initKeyboard();
+            startNewGame();
+        }
+
+        function loadStats() {
+            const saved = localStorage.getItem('wordle_hanzo_stats');
+            if (saved) {
+                try { stats = JSON.parse(saved); } catch (e) {}
+            }
+        }
+
+        function saveStats() {
+            localStorage.setItem('wordle_hanzo_stats', JSON.stringify(stats));
+        }
+
+        function initBoard() {
+            gameBoard.innerHTML = '';
+            for (let r = 0; r < MAX_ATTEMPTS; r++) {
+                const rowEl = document.createElement('div');
+                rowEl.className = 'grid grid-cols-5 gap-1.5 w-full';
+                rowEl.dataset.row = r;
+
+                for (let c = 0; c < WORD_LENGTH; c++) {
+                    const tileContainer = document.createElement('div');
+                    tileContainer.className = 'tile-container w-full h-full aspect-square';
+
+                    tileContainer.innerHTML = `
+                        <div class="tile-inner" data-col="${c}">
+                            <div class="tile-front bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-2xl sm:text-3xl uppercase"></div>
+                            <div class="tile-back border-0 text-white font-extrabold text-2xl sm:text-3xl uppercase"></div>
+                        </div>
+                    `;
+                    rowEl.appendChild(tileContainer);
+                }
+                gameBoard.appendChild(rowEl);
+            }
+        }
+
+        function initKeyboard() {
+            keyboardEl.innerHTML = '';
+            KEYBOARD_LAYOUT.forEach(row => {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'flex justify-center gap-1 w-full';
+
+                row.forEach(key => {
+                    const btn = document.createElement('button');
+                    btn.dataset.key = key;
+
+                    let extraClass = 'px-1 sm:px-2 py-3 text-xs sm:text-sm font-bold rounded-md bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 transition-colors key-btn';
+                    
+                    if (key === 'ENTER' || key === 'BACKSPACE') {
+                        extraClass += ' flex-1 max-w-[65px] text-[10px] sm:text-xs bg-slate-300 dark:bg-slate-700';
+                    } else {
+                        extraClass += ' flex-1 max-w-[40px]';
+                    }
+
+                    btn.className = extraClass;
+
+                    if (key === 'BACKSPACE') {
+                        btn.innerHTML = `<i class="fa-solid fa-backspace text-sm"></i>`;
+                    } else {
+                        btn.innerText = key;
+                    }
+
+                    btn.addEventListener('click', () => handleKeyPress(key));
+                    rowDiv.appendChild(btn);
+                });
+                keyboardEl.appendChild(rowDiv);
+            });
+        }
+
+        function startNewGame() {
+            const wordList = currentLang === 'VI' ? WORDS_VI : WORDS_EN;
+            targetWord = wordList[Math.floor(Math.random() * wordList.length)];
+            
+            currentRow = 0;
+            currentCol = 0;
+            isGameOver = false;
+            boardState = Array(MAX_ATTEMPTS).fill(null).map(() => Array(WORD_LENGTH).fill(''));
+            letterStatuses = {};
+
+            // Clear visual board
+            const tilesInner = gameBoard.querySelectorAll('.tile-inner');
+            tilesInner.forEach(inner => {
+                inner.classList.remove('flipped');
+                const front = inner.querySelector('.tile-front');
+                const back = inner.querySelector('.tile-back');
+                
+                front.innerText = '';
+                front.className = 'tile-front bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-2xl sm:text-3xl uppercase';
+                
+                back.innerText = '';
+                back.className = 'tile-back border-0 text-white font-extrabold text-2xl sm:text-3xl uppercase';
+            });
+
+            // Reset Keyboard UI
+            const keyButtons = keyboardEl.querySelectorAll('button');
+            keyButtons.forEach(btn => {
+                const key = btn.dataset.key;
+                let bgClass = 'bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200';
+                if (key === 'ENTER' || key === 'BACKSPACE') {
+                    bgClass = 'bg-slate-300 dark:bg-slate-700 text-slate-800 dark:text-slate-200';
+                }
+                btn.className = `px-1 sm:px-2 py-3 text-xs sm:text-sm font-bold rounded-md ${bgClass} transition-colors key-btn ${key === 'ENTER' || key === 'BACKSPACE' ? 'flex-1 max-w-[65px] text-[10px] sm:text-xs' : 'flex-1 max-w-[40px]'}`;
+            });
+
+            showToast(`Từ mới chế độ ${currentLang === 'VI' ? 'Tiếng Việt' : 'Tiếng Anh'}`);
+        }
+
+        function setupEventListeners() {
+            document.addEventListener('keydown', handleKeyDown);
+
+            btnTheme.addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+            });
+
+            btnLang.addEventListener('click', () => {
+                currentLang = currentLang === 'VI' ? 'EN' : 'VI';
+                btnLang.innerText = currentLang;
+                startNewGame();
+            });
+
+            btnHelp.addEventListener('click', () => modalHelp.classList.remove('hidden'));
+            btnStats.addEventListener('click', () => {
+                updateStatsUI();
+                modalStats.classList.remove('hidden');
+            });
+
+            btnRestart.addEventListener('click', startNewGame);
+            btnStatsRestart.addEventListener('click', () => {
+                modalStats.classList.add('hidden');
+                startNewGame();
+            });
+
+            document.querySelectorAll('.btn-close-modal').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    modalHelp.classList.add('hidden');
+             
+modalStats.classList.add('hidden');
+                });
+            });
+        }
+
+        function handleKeyDown(e) {
+            if (isGameOver) return;
+
+            if (e.key === 'Enter') {
+                handleKeyPress('ENTER');
+            } else if (e.key === 'Backspace') {
+                handleKeyPress('BACKSPACE');
+            } else {
+                const key = e.key.toUpperCase();
+                if (/^[A-Z]$/.test(key)) {
+                    handleKeyPress(key);
+                }
+            }
+        }
+
+        function handleKeyPress(key) {
+            if (isGameOver) return;
+
+            if (key === 'BACKSPACE') {
+                deleteLetter();
+            } else if (key === 'ENTER') {
+                submitGuess();
+            } else if (/^[A-Z]$/.test(key)) {
+                addLetter(key);
+            }
+        }
+
+        function addLetter(letter) {
+            if (currentCol < WORD_LENGTH) {
+                boardState[currentRow][currentCol] = letter;
+                const rowEl = gameBoard.children[currentRow];
+                const tileInner = rowEl.children[currentCol].querySelector('.tile-inner');
+                const front = tileInner.querySelector('.tile-front');
+                
+                front.innerText = letter;
+                front.classList.add('tile-pop', 'border-slate-400', 'dark:border-slate-500');
+                
+                setTimeout(() => front.classList.remove('tile-pop'), 150);
+                currentCol++;
+            }
+        }
+
+        function deleteLetter() {
+            if (currentCol > 0) {
+                currentCol--;
+                boardState[currentRow][currentCol] = '';
+                const rowEl = gameBoard.children[currentRow];
+                const tileInner = rowEl.children[currentCol].querySelector('.tile-inner');
+                const front = tileInner.querySelector('.tile-front');
+                
+                front.innerText = '';
+                front.classList.remove('border-slate-400', 'dark:border-slate-500');
+            }
+        }
+
+        function submitGuess() {
+            if (currentCol < WORD_LENGTH) {
+                showToast('Chưa đủ 5 chữ cái!');
+                const rowEl = gameBoard.children[currentRow];
+                rowEl.classList.add('tile-shake');
+                setTimeout(() => rowEl.classList.remove('tile-shake'), 400);
+                return;
+            }
+
+            const currentGuess = boardState[currentRow].join('');
+            const targetArr = targetWord.split('');
+            const guessArr = currentGuess.split('');
+            const result = Array(WORD_LENGTH).fill('absent');
+            const targetUsed = Array(WORD_LENGTH).fill(false);
+
+            // First pass: Correct positions
+            guessArr.forEach((char, i) => {
+                if (char === targetArr[i]) {
+                    result[i] = 'correct';
+                    targetUsed[i] = true;
+                }
+            });
+
+            // Second pass: Present positions
+            guessArr.forEach((char, i) => {
+                if (result[i] !== 'correct') {
+                    const foundIndex = targetArr.findIndex((tChar, tIdx) => tChar === char && !targetUsed[tIdx]);
+                    if (foundIndex !== -1) {
+                        result[i] = 'present';
+                        targetUsed[foundIndex] = true;
+                    }
+                }
+            });
+
+            // Animate Flip
+            const rowEl = gameBoard.children[currentRow];
+            guessArr.forEach((char, c) => {
+                const tileInner = rowEl.children[c].querySelector('.tile-inner');
+                const back = tileInner.querySelector('.tile-back');
+
+                back.innerText = char;
+                let bgClass = 'bg-slate-500';
+                if (result[c] === 'correct') bgClass = 'bg-emerald-500';
+                else if (result[c] === 'present') bgClass = 'bg-amber-500';
+
+                back.className = `tile-back ${bgClass} text-white font-extrabold text-2xl sm:text-3xl uppercase`;
+
+                setTimeout(() => {
+                    tileInner.classList.add('flipped');
+                }, c * 200);
+
+                // Update status for keyboard
+                if (!letterStatuses[char] || result[c] === 'correct' || (result[c] === 'present' && letterStatuses[char] !== 'correct')) {
+                    letterStatuses[char] = result[c];
+                }
+            });
+
+            setTimeout(() => {
+                updateKeyboardUI();
+
+                if (currentGuess === targetWord) {
+                    isGameOver = true;
+                    stats.played++;
+                    stats.wins++;
+                    stats.currentStreak++;
+                    if (stats.currentStreak > stats.maxStreak) stats.maxStreak = stats.currentStreak;
+                    saveStats();
+
+                    triggerConfetti();
+                    showToast('Xuất sắc! 🎉');
+                    setTimeout(() => {
+                        updateStatsUI();
+                        modalStats.classList.remove('hidden');
+                    }, 1500);
+                } else if (currentRow === MAX_ATTEMPTS - 1) {
+                    isGameOver = true;
+                    stats.played++;
+                    stats.currentStreak = 0;
+                    saveStats();
+
+                    showToast(`Đáp án là: ${targetWord}`);
+                    setTimeout(() => {
+                        updateStatsUI();
+                        modalStats.classList.remove('hidden');
+                    }, 2000);
+                } else {
+                    currentRow++;
+                    currentCol = 0;
+                }
+            }, WORD_LENGTH * 200 + 200);
+        }
+
+        function updateKeyboardUI() {
+            Object.keys(letterStatuses).forEach(char => {
+                const status = letterStatuses[char];
+                const btn = keyboardEl.querySelector(`button[data-key="${char}"]`);
+                if (btn) {
+                    let bgClass = 'bg-slate-500 text-white';
+                    if (status === 'correct') bgClass = 'bg-emerald-500 text-white';
+                    else if (status === 'present') bgClass = 'bg-amber-500 text-white';
+                    
+                    btn.className = `px-1 sm:px-2 py-3 text-xs sm:text-sm font-bold rounded-md ${bgClass} transition-colors key-btn flex-1 max-w-[40px]`;
+                }
+            });
+        }
+
+        function updateStatsUI() {
+            document.getElementById('stat-played').innerText = stats.played;
+            const winRate = stats.played > 0 ? Math.round((stats.wins / stats.played) * 100) : 0;
+            document.getElementById('stat-winrate').innerText = `${winRate}%`;
+            document.getElementById('stat-streak').innerText = stats.currentStreak;
+            document.getElementById('stat-max-streak').innerText = stats.maxStreak;
+        }
+
+        function showToast(msg) {
+            toastEl.innerText = msg;
+            toastEl.classList.remove('hidden', 'opacity-0', 'scale-95');
+            toastEl.classList.add('opacity-100', 'scale-100');
+
+            setTimeout(() => {
+                toastEl.classList.remove('opacity-100', 'scale-100');
+                toastEl.classList.add('opacity-0', 'scale-95');
+                setTimeout(() => toastEl.classList.add('hidden'), 200);
+            }, 2000);
+        }
+
+        function triggerConfetti() {
+            if (typeof confetti === 'function') {
+                confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+            }
+        }
+
+        // Run Application
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>  
